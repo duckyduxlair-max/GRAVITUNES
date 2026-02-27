@@ -15,8 +15,6 @@ import { useLibraryStore } from './store/libraryStore';
 import ThemeProvider from './components/ThemeProvider';
 import AudioController from './components/player/AudioController';
 import Home from './pages/Home.tsx';
-import GraviPopup from './components/GraviPopup';
-import { startListening, isVoiceSupported } from './services/voiceService';
 
 const App: React.FC = () => {
   useEffect(() => {
@@ -37,18 +35,12 @@ const App: React.FC = () => {
     };
     cleanupCache();
 
-    // Auto-start Gravi if previously enabled
-    if (localStorage.getItem('gravi_enabled') === 'true' && isVoiceSupported()) {
-      startListening(() => { }, (s) => console.log('[Gravi]', s));
-    }
-
     return () => { updateSW(); };
   }, []);
 
   return (
     <ThemeProvider>
       <AudioController />
-      <GraviPopup />
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<Layout />}>

@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { Trash2, Palette, ChevronRight, HardDrive, RefreshCw, Upload, Shield, RotateCcw, Sparkles, Download, Moon, Archive, CheckCircle, XCircle, AlertCircle, Loader2, Mic, MicOff, Type } from 'lucide-react';
+import { Trash2, Palette, ChevronRight, HardDrive, RefreshCw, Upload, Shield, RotateCcw, Sparkles, Download, Moon, Archive, CheckCircle, XCircle, AlertCircle, Loader2, Headphones, Type } from 'lucide-react';
 import { useUIStore } from '../store/uiStore';
 import { clearAllAudio, getStorageStats } from '../services/db';
 import PageTransition from '../components/layout/PageTransition';
@@ -9,7 +9,7 @@ import { THEMES } from '../components/ThemeProvider';
 import { useDownloadStore } from '../store/downloadStore';
 import { exportLibraryBackup, importLibraryBackup } from '../services/backupService';
 import { startSleepTimer as globalStartSleep, cancelSleepTimer as globalCancelSleep, getSleepState, onSleepChange } from '../services/sleepTimer';
-import { startListening, stopListening, isVoiceSupported } from '../services/voiceService';
+import { setPreset, getPreset, getAvailablePresets } from '../services/audioEnhancement';
 
 const formatBytes = (bytes: number): string => {
     if (bytes === 0) return '0 B';
@@ -49,28 +49,6 @@ const Settings: React.FC = () => {
     const sleepRemaining = sleepState.remaining;
     const startSleepTimer = (min: number) => globalStartSleep(min);
     const cancelSleepTimer = () => globalCancelSleep();
-
-    // Gravi voice assistant toggle
-    const [graviEnabled, setGraviEnabled] = useState(() => localStorage.getItem('gravi_enabled') === 'true');
-
-    const toggleGravi = () => {
-        if (!graviEnabled) {
-            if (!isVoiceSupported()) {
-                alert('Voice recognition is not supported in this browser.');
-                return;
-            }
-            setGraviEnabled(true);
-            localStorage.setItem('gravi_enabled', 'true');
-            startListening(
-                () => { },
-                (status) => console.log('[Gravi]', status)
-            );
-        } else {
-            setGraviEnabled(false);
-            localStorage.setItem('gravi_enabled', 'false');
-            stopListening();
-        }
-    };
 
     // Light text toggle
     const [lightText, setLightText] = useState(() => document.documentElement.getAttribute('data-theme') === 'light');
@@ -422,28 +400,29 @@ const Settings: React.FC = () => {
                         )}
                     </section>
 
-                    {/* ─── Voice Assistant (Gravi) ─── */}
+                    {/* ─── Earphone Controls ─── */}
                     <section className="glass-panel rounded-2xl p-5 space-y-3">
-                        <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-3">
-                                <div className="w-9 h-9 rounded-xl bg-accent/10 flex items-center justify-center shrink-0">
-                                    {graviEnabled ? <Mic size={16} className="text-accent" /> : <MicOff size={16} className="text-zinc-500" />}
-                                </div>
-                                <div>
-                                    <h3 className="text-white font-medium text-sm">Voice Assistant — Gravi</h3>
-                                    <p className="text-zinc-600 text-[11px] mt-0.5">Say "play", "pause", "next", "shuffle"</p>
-                                </div>
+                        <div className="flex items-center gap-3">
+                            <div className="w-9 h-9 rounded-xl bg-accent/10 flex items-center justify-center shrink-0">
+                                <Headphones size={16} className="text-accent" />
                             </div>
-                            <button
-                                onClick={toggleGravi}
-                                className={`w-12 h-7 rounded-full transition-all relative ${graviEnabled ? 'bg-accent' : 'bg-white/10'}`}
-                            >
-                                <div className={`w-5 h-5 rounded-full bg-white shadow-md absolute top-1 transition-all ${graviEnabled ? 'right-1' : 'left-1'}`} />
-                            </button>
+                            <div>
+                                <h3 className="text-white font-medium text-sm">Earphone Controls</h3>
+                                <p className="text-zinc-600 text-[11px] mt-0.5">Play/Pause, Next, Previous via headset buttons</p>
+                            </div>
                         </div>
-                        {graviEnabled && (
-                            <p className="text-[10px] text-accent/60 animate-pulse">🎙️ Gravi is active — listening for commands</p>
-                        )}
+                        <div className="bg-white/3 rounded-xl p-3 space-y-1.5">
+                            <p className="text-[10px] text-zinc-400 flex items-center justify-between">
+                                <span>▶ Play / ⏸ Pause</span><span className="text-accent/60">Single press</span>
+                            </p>
+                            <p className="text-[10px] text-zinc-400 flex items-center justify-between">
+                                <span>⏭ Next Track</span><span className="text-accent/60">Double press</span>
+                            </p>
+                            <p className="text-[10px] text-zinc-400 flex items-center justify-between">
+                                <span>⏮ Previous Track</span><span className="text-accent/60">Triple press</span>
+                            </p>
+                            <p className="text-[9px] text-zinc-600 mt-2">Works with Bluetooth & wired headsets via MediaSession API</p>
+                        </div>
                     </section>
 
                     {/* ─── Appearance ─── */}
@@ -465,6 +444,41 @@ const Settings: React.FC = () => {
                                 <div className={`w-5 h-5 rounded-full bg-white shadow-md absolute top-1 transition-all ${lightText ? 'right-1' : 'left-1'}`} />
                             </button>
                         </div>
+                    </section>
+
+                    {/* ─── Audio Enhancement ─── */}
+                    <section className="glass-panel rounded-2xl p-5 space-y-4">
+                        <div className="flex items-center gap-3">
+                            <div className="w-9 h-9 rounded-xl bg-accent/10 flex items-center justify-center shrink-0">
+                                <span className="text-lg">🎧</span>
+                            </div>
+                            <div>
+                                <h3 className="text-white font-medium text-sm">Audio Enhancement</h3>
+                                <p className="text-zinc-600 text-[11px] mt-0.5">Dolby-style spatial audio & EQ presets</p>
+                            </div>
+                        </div>
+                        <div className="grid grid-cols-5 gap-2">
+                            {getAvailablePresets().map(p => {
+                                const isActive = getPreset() === p.id;
+                                return (
+                                    <button
+                                        key={p.id}
+                                        onClick={() => { setPreset(p.id); /* force re-render */ setCustomMinutes(c => c); }}
+                                        className={`flex flex-col items-center gap-1.5 py-3 rounded-xl transition-all border
+                                            ${isActive
+                                                ? 'bg-accent/15 border-accent/30 text-accent'
+                                                : 'bg-white/3 border-white/5 text-zinc-500 hover:text-white hover:bg-white/5'
+                                            }`}
+                                    >
+                                        <span className="text-lg">{p.icon}</span>
+                                        <span className="text-[9px] font-bold tracking-wide">{p.name}</span>
+                                    </button>
+                                );
+                            })}
+                        </div>
+                        <p className="text-[9px] text-zinc-600 text-center">
+                            {getAvailablePresets().find(p => p.id === getPreset())?.description || 'Standard audio'}
+                        </p>
                     </section>
 
                     {/* ─── About ─── */}

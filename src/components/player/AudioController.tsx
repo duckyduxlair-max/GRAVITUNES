@@ -3,6 +3,7 @@ import { usePlayerStore } from '../../store/playerStore';
 import { useLibraryStore } from '../../store/libraryStore';
 import { getAudioBlob, pruneUnusedAudio } from '../../services/db';
 import { eventBus, Events } from '../../services/eventBus';
+import { createEnhancementNodes } from '../../services/audioEnhancement';
 
 export let globalAnalyzer: AnalyserNode | null = null;
 export const globalAudio = new Audio();
@@ -128,7 +129,16 @@ const AudioController: React.FC = () => {
 
                     sourceNodeRef.current = audioContextRef.current.createMediaElementSource(globalAudio);
                     sourceNodeRef.current.connect(analyzerRef.current);
-                    analyzerRef.current.connect(audioContextRef.current.destination);
+
+                    // Insert enhancement chain: analyzer → enhancement → destination
+                    try {
+                        const enhNodes = createEnhancementNodes(audioContextRef.current);
+                        analyzerRef.current.connect(enhNodes.bassBoost);
+                        enhNodes.compressor.connect(audioContextRef.current.destination);
+                    } catch {
+                        // Fallback: direct connection if enhancement fails
+                        analyzerRef.current.connect(audioContextRef.current.destination);
+                    }
                 } catch (err) {
                     console.warn('Web Audio API initialization failed', err);
                 }
