@@ -593,7 +593,7 @@ def action_cookies():
     
 def action_logs():
     print_header()
-    log(f"{C.YELLOW}Live Log Stream (Last 50 lines). Press Ctrl+C to return to menu.{C.END}")
+    log(f"{C.YELLOW}Live Log Tail — Append Mode. Press Ctrl+C to return.{C.END}")
     
     LOGS_DIR = PROJECT_DIR / "logs"
     if not LOGS_DIR.exists():
@@ -601,33 +601,70 @@ def action_logs():
         input(f"\n{C.CYAN}Press Enter to return...{C.END}")
         return
 
-    def tail(filename, n=50):
+    backend_log = LOGS_DIR / "backend.log"
+    frontend_log = LOGS_DIR / "frontend.log"
+    
+    # Start from end of current files
+    def get_size(f):
+        try: return f.stat().st_size
+        except: return 0
+    
+    be_pos = get_size(backend_log)
+    fe_pos = get_size(frontend_log)
+    
+    # Show last 20 lines to start
+    def tail(filename, n=20):
         try:
             with open(filename, "r", encoding='utf-8') as f:
-                return f.readlines()[-n:]
+                lines = f.readlines()
+                return lines[-n:]
         except:
             return []
-
+    
+    print(f"\n {C.BOLD}{C.CYAN}── Recent Backend Logs ──{C.END}")
+    for line in tail(backend_log):
+        print(f"  {C.DIM}[BE]{C.END} {line.strip()}")
+    
+    print(f"\n {C.BOLD}{C.CYAN}── Recent Frontend Logs ──{C.END}")
+    for line in tail(frontend_log):
+        print(f"  {C.DIM}[FE]{C.END} {line.strip()}")
+    
+    print(f"\n {C.GREEN}── Watching for new logs (Ctrl+C to stop) ──{C.END}\n")
+    
     try:
         while True:
-            clear_screen()
-            print_header()
-            print(f" {C.BOLD}{C.CYAN}BACKEND LOGS (Last 50 lines):{C.END}")
-            for line in tail(LOGS_DIR / "backend.log"):
-                ts = time.strftime('%H:%M:%S')
-                print(f"  {C.DIM}[{ts}]{C.END} {line.strip()}")
+            # Check backend for new lines
+            new_be_size = get_size(backend_log)
+            if new_be_size > be_pos:
+                try:
+                    with open(backend_log, "r", encoding='utf-8') as f:
+                        f.seek(be_pos)
+                        new_lines = f.read()
+                        for line in new_lines.strip().split('\n'):
+                            if line.strip():
+                                ts = time.strftime('%H:%M:%S')
+                                print(f"  {C.DIM}[{ts}]{C.END} {C.CYAN}[BE]{C.END} {line.strip()}")
+                except: pass
+                be_pos = new_be_size
             
-            print(f"\n {C.BOLD}{C.CYAN}FRONTEND LOGS (Last 50 lines):{C.END}")
-            for line in tail(LOGS_DIR / "frontend.log"):
-                ts = time.strftime('%H:%M:%S')
-                print(f"  {C.DIM}[{ts}]{C.END} {line.strip()}")
+            # Check frontend for new lines
+            new_fe_size = get_size(frontend_log)
+            if new_fe_size > fe_pos:
+                try:
+                    with open(frontend_log, "r", encoding='utf-8') as f:
+                        f.seek(fe_pos)
+                        new_lines = f.read()
+                        for line in new_lines.strip().split('\n'):
+                            if line.strip():
+                                ts = time.strftime('%H:%M:%S')
+                                print(f"  {C.DIM}[{ts}]{C.END} {C.MAGENTA}[FE]{C.END} {line.strip()}")
+                except: pass
+                fe_pos = new_fe_size
             
-            print(f"\n {C.ITALIC}{C.DIM}Auto-refreshing in 5s (Ctrl+C to go back)...{C.END}")
-            time.sleep(5)
+            time.sleep(1)
     except KeyboardInterrupt:
-        pass
+        print(f"\n {C.GREEN}Log stream stopped.{C.END}")
     
-    # Return to menu cleanly
     return
 
 def action_update():
