@@ -129,8 +129,6 @@ const AudioController: React.FC = () => {
                     sourceNodeRef.current = audioContextRef.current.createMediaElementSource(globalAudio);
                     sourceNodeRef.current.connect(analyzerRef.current);
                     analyzerRef.current.connect(audioContextRef.current.destination);
-
-                    eventBus.emit(Events.ANALYZER_READY, analyzerRef.current);
                 } catch (err) {
                     console.warn('Web Audio API initialization failed', err);
                 }
@@ -233,19 +231,12 @@ const AudioController: React.FC = () => {
     // ── Sync playback state ──
     useEffect(() => {
         if (isPlaying) {
-            const startPlay = () => {
-                globalAudio.play().catch((err) => {
-                    // Ignore NotSupportedError which happens when src is empty and loadAudio is still running
-                    if (err.name !== 'NotSupportedError') {
-                        setIsPlaying(false);
-                    }
-                });
-            };
-
             if (audioContextRef.current?.state === 'suspended') {
-                audioContextRef.current.resume().then(startPlay);
+                audioContextRef.current.resume().then(() => {
+                    globalAudio.play().catch(() => setIsPlaying(false));
+                });
             } else {
-                startPlay();
+                globalAudio.play().catch(() => setIsPlaying(false));
             }
         } else {
             globalAudio.pause();

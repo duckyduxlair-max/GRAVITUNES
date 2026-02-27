@@ -567,29 +567,54 @@ def action_debug():
 def action_cookies():
     print_header()
     print(f"   {C.YELLOW}{C.BOLD}YouTube Cookies Update{C.END}")
-    print(f"   {C.DIM}Paste your netscape format cookies below.{C.END}")
-    print(f"   {C.DIM}Press Enter on an empty line when finished.{C.END}")
     print(f"   {'─'*30}")
     
-    log("Accepting input (End with empty line):")
-    lines = []
-    while True:
+    # Ensure server dir exists
+    SERVER_DIR.mkdir(parents=True, exist_ok=True)
+    
+    # Create file if it doesn't exist
+    if not COOKIES_FILE.exists():
+        COOKIES_FILE.touch()
+        log("Created new cookies.txt file.")
+    
+    # Detect platform
+    is_termux = os.path.exists("/data/data/com.termux")
+    
+    if is_termux or shutil.which("nano"):
+        print(f"\n   {C.CYAN}Opening nano editor...{C.END}")
+        print(f"   {C.DIM}Paste your Netscape cookies inside the editor.{C.END}")
+        print(f"   {C.DIM}When done: {C.BOLD}Ctrl+X → Y → Enter{C.END}{C.DIM} to save.{C.END}")
+        print()
         try:
-            line = input()
-            if not line: break
-            lines.append(line + "\n")
-        except EOFError:
-            break
-            
-    if not lines:
-        warn("No content provided. Operation cancelled.")
+            subprocess.run(["nano", str(COOKIES_FILE)])
+        except FileNotFoundError:
+            error("nano not found. Install it: pkg install nano")
+            return
     else:
+        # Windows / systems without nano: use notepad or default editor
+        print(f"\n   {C.CYAN}Opening cookies file in editor...{C.END}")
+        print(f"   {C.DIM}Paste your Netscape cookies, save, and close.{C.END}")
+        print()
         try:
-            with open(COOKIES_FILE, "w", encoding='utf-8') as f:
-                f.writelines(lines)
-            success(f"Successfully updated cookies in {COOKIES_FILE}")
+            if sys.platform == "win32":
+                subprocess.run(["notepad", str(COOKIES_FILE)])
+            else:
+                editor = os.environ.get("EDITOR", "vi")
+                subprocess.run([editor, str(COOKIES_FILE)])
         except Exception as e:
-            error(f"Failed to save cookies: {e}")
+            error(f"Could not open editor: {e}")
+            return
+    
+    # Verify the file has content
+    try:
+        content = COOKIES_FILE.read_text(encoding='utf-8').strip()
+        if content:
+            success(f"Cookies saved to {COOKIES_FILE}")
+            log(f"File size: {len(content)} bytes")
+        else:
+            warn("Cookies file is empty. YouTube may require authentication.")
+    except Exception as e:
+        error(f"Could not read cookies file: {e}")
     
 def action_logs():
     print_header()

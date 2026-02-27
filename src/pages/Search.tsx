@@ -234,8 +234,7 @@ const Search = () => {
                             return (
                                 <div
                                     key={result.id}
-                                    onClick={() => handleStream(result)}
-                                    className={`group flex items-center gap-3 p-2.5 rounded-2xl transition-all duration-300 border cursor-pointer
+                                    className={`group flex items-center gap-3 p-2.5 rounded-2xl transition-all duration-300 border cursor-default
                                         ${isThisStreaming
                                             ? 'bg-accent/5 border-accent/20 shadow-[0_0_20px_rgba(var(--accent-rgb),0.08)]'
                                             : 'border-transparent hover:border-white/5 hover:bg-white/3'
@@ -283,7 +282,7 @@ const Search = () => {
                                             <ListPlus size={14} />
                                         </button>
                                         <button
-                                            onClick={(e) => { e.stopPropagation(); handleLike(result); }}
+                                            onClick={() => handleLike(result)}
                                             className={`w-9 h-9 rounded-full flex items-center justify-center transition-all border
                                                 ${isLiked
                                                     ? 'bg-accent/15 border-accent/30 text-accent shadow-[0_0_12px_rgba(var(--accent-rgb),0.2)]'
@@ -298,16 +297,16 @@ const Search = () => {
                                         </button>
 
                                         <button
-                                            onClick={(e) => { e.stopPropagation(); handleStream(result); }}
-                                            className={`w-9 h-9 rounded-full flex items-center justify-center transition-all shadow-lg
+                                            onClick={() => handleStream(result)}
+                                            className={`w-9 h-9 rounded-full flex items-center justify-center transition-all border shrink-0
                                                 ${isThisStreaming
-                                                    ? 'bg-accent text-black scale-105'
-                                                    : 'bg-white/10 text-white hover:bg-white/20 hover:scale-105'
+                                                    ? 'bg-accent border-accent text-black shadow-[0_0_15px_rgba(var(--accent-rgb),0.4)]'
+                                                    : 'bg-white/5 border-white/5 text-zinc-400 hover:bg-accent hover:border-accent hover:text-black'
                                                 }`}
-                                            title={isThisStreaming ? "Pause" : "Play stream"}
-                                        >{isThisStreaming && isPlaying
-                                            ? <Pause size={14} fill="currentColor" />
-                                            : <Play size={14} fill="currentColor" className="ml-0.5" />
+                                        >
+                                            {isThisStreaming && isPlaying
+                                                ? <Pause size={14} fill="currentColor" />
+                                                : <Play size={14} fill="currentColor" className="ml-0.5" />
                                             }
                                         </button>
                                     </div>

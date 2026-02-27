@@ -5,7 +5,6 @@ import BottomPlayer from './BottomPlayer';
 import PlayerModal from './PlayerModal';
 import RightSidebar from './RightSidebar';
 import MobileDock from './MobileDock';
-import GraviAssistant from '../common/GraviAssistant';
 import { useUIStore } from '../../store/uiStore';
 import { Menu, Search } from 'lucide-react';
 
@@ -82,7 +81,6 @@ const Layout: React.FC = () => {
             {/* Mobile Bottom Dock */}
             <MobileDock />
 
-            <GraviAssistant />
             <PlayerModal />
         </div>
     );

@@ -7,8 +7,9 @@ import { usePlayerStore } from '../store/playerStore';
 import { useNavigate } from 'react-router-dom';
 import { THEMES } from '../components/ThemeProvider';
 import { useDownloadStore } from '../store/downloadStore';
-import { sleepTimerService } from '../services/sleepTimerService';
 import { exportLibraryBackup, importLibraryBackup } from '../services/backupService';
+import { startSleepTimer as globalStartSleep, cancelSleepTimer as globalCancelSleep, getSleepState, onSleepChange } from '../services/sleepTimer';
+import { startListening, stopListening, isVoiceSupported } from '../services/voiceService';
 
 const formatBytes = (bytes: number): string => {
     if (bytes === 0) return '0 B';
@@ -16,6 +17,12 @@ const formatBytes = (bytes: number): string => {
     const sizes = ['B', 'KB', 'MB', 'GB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return `${(bytes / Math.pow(k, i)).toFixed(1)} ${sizes[i]}`;
+};
+
+const formatSleepTime = (seconds: number): string => {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m}:${s.toString().padStart(2, '0')}`;
 };
 
 const Settings: React.FC = () => {
@@ -29,26 +36,39 @@ const Settings: React.FC = () => {
     const backupInputRef = useRef<HTMLInputElement>(null);
     const [backupStatus, setBackupStatus] = useState<string | null>(null);
 
-    // ─── Sleep Timer (global service) ───
-    const [sleepMinutes, setSleepMinutes] = useState(sleepTimerService.getTotalMinutes());
-    const [sleepRemaining, setSleepRemaining] = useState(sleepTimerService.getRemaining());
+    // ─── Sleep Timer (global — persists across tabs) ───
+    const [sleepState, setSleepState] = useState(getSleepState());
     const [customMinutes, setCustomMinutes] = useState('');
+
+    useEffect(() => {
+        const unsub = onSleepChange(() => setSleepState(getSleepState()));
+        return unsub;
+    }, []);
+
+    const sleepMinutes = sleepState.minutes;
+    const sleepRemaining = sleepState.remaining;
+    const startSleepTimer = (min: number) => globalStartSleep(min);
+    const cancelSleepTimer = () => globalCancelSleep();
 
     // Gravi voice assistant toggle
     const [graviEnabled, setGraviEnabled] = useState(() => localStorage.getItem('gravi_enabled') === 'true');
 
-    const toggleGravi = async () => {
+    const toggleGravi = () => {
         if (!graviEnabled) {
-            try {
-                await navigator.mediaDevices.getUserMedia({ audio: true });
-                setGraviEnabled(true);
-                localStorage.setItem('gravi_enabled', 'true');
-            } catch {
-                alert('Microphone permission denied. Please allow mic access in browser settings.');
+            if (!isVoiceSupported()) {
+                alert('Voice recognition is not supported in this browser.');
+                return;
             }
+            setGraviEnabled(true);
+            localStorage.setItem('gravi_enabled', 'true');
+            startListening(
+                () => { },
+                (status) => console.log('[Gravi]', status)
+            );
         } else {
             setGraviEnabled(false);
             localStorage.setItem('gravi_enabled', 'false');
+            stopListening();
         }
     };
 
@@ -60,23 +80,6 @@ const Settings: React.FC = () => {
         document.documentElement.setAttribute('data-theme', newVal ? 'light' : 'dark');
         localStorage.setItem('gravitunes_text_theme', newVal ? 'light' : 'dark');
     };
-
-    const startSleepTimer = (minutes: number) => {
-        sleepTimerService.start(minutes);
-    };
-
-    const cancelSleepTimer = () => {
-        sleepTimerService.cancel();
-    };
-
-    // Subscribe to global timer updates
-    useEffect(() => {
-        const unsub = sleepTimerService.subscribe((remaining, total) => {
-            setSleepRemaining(remaining);
-            setSleepMinutes(total);
-        });
-        return unsub;
-    }, []);
 
     const formatSleepTime = (seconds: number) => {
         const m = Math.floor(seconds / 60);
