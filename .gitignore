@@ -1,0 +1,7 @@
+node_modules/
+dist/
+logs/
+.server_pids.json
+server/temp/
+server/cookies.txt
+*.log

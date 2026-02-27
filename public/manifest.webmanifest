@@ -1,0 +1,30 @@
+{
+    "name": "GraviTunes Music",
+    "short_name": "GraviTunes",
+    "description": "A futuristic music player with premium glass UI",
+    "start_url": "/",
+    "display": "standalone",
+    "background_color": "#0F0F0F",
+    "theme_color": "#0F0F0F",
+    "orientation": "any",
+    "icons": [
+        {
+            "src": "/gravitunes-icon.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "any"
+        },
+        {
+            "src": "/gravitunes-icon.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "any"
+        },
+        {
+            "src": "/gravitunes-icon.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "maskable"
+        }
+    ]
+}
