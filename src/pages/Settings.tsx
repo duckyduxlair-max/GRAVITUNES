@@ -35,6 +35,7 @@ const Settings: React.FC = () => {
     const { downloads, clearHistory: clearDownloadHistory } = useDownloadStore();
     const backupInputRef = useRef<HTMLInputElement>(null);
     const [backupStatus, setBackupStatus] = useState<string | null>(null);
+    const [activePreset, setActivePreset] = useState(() => getPreset());
 
     // ─── Sleep Timer (global — persists across tabs) ───
     const [sleepState, setSleepState] = useState(getSleepState());
@@ -459,11 +460,11 @@ const Settings: React.FC = () => {
                         </div>
                         <div className="grid grid-cols-5 gap-2">
                             {getAvailablePresets().map(p => {
-                                const isActive = getPreset() === p.id;
+                                const isActive = activePreset === p.id;
                                 return (
                                     <button
                                         key={p.id}
-                                        onClick={() => { setPreset(p.id); /* force re-render */ setCustomMinutes(c => c); }}
+                                        onClick={() => { setPreset(p.id); setActivePreset(p.id); }}
                                         className={`flex flex-col items-center gap-1.5 py-3 rounded-xl transition-all border
                                             ${isActive
                                                 ? 'bg-accent/15 border-accent/30 text-accent'
@@ -477,7 +478,7 @@ const Settings: React.FC = () => {
                             })}
                         </div>
                         <p className="text-[9px] text-zinc-600 text-center">
-                            {getAvailablePresets().find(p => p.id === getPreset())?.description || 'Standard audio'}
+                            {getAvailablePresets().find(p => p.id === activePreset)?.description || 'Standard audio'}
                         </p>
                     </section>
 

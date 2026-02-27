@@ -35,6 +35,11 @@ const App: React.FC = () => {
     };
     cleanupCache();
 
+    // Lock to portrait orientation
+    try {
+      (screen.orientation as any)?.lock?.('portrait').catch(() => { });
+    } catch { /* unsupported — manifest handles it */ }
+
     return () => { updateSW(); };
   }, []);
 
