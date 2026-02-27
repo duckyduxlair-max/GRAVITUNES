@@ -1,5 +1,6 @@
 import { saveAudioBlob, getAudioBlob } from './db';
 import { useLibraryStore } from '../store/libraryStore';
+import { useDownloadStore } from '../store/downloadStore';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
 
@@ -30,11 +31,23 @@ export const importAudioFromUrl = async (
     url: string,
     onProgress: (progress: number) => void
 ): Promise<{ success: boolean; error?: string }> => {
+    const dlId = `dl_url_${Date.now()}`;
+    const titleFromUrl = url.split('/').pop()?.split('?')[0] || 'Unknown Track';
+    useDownloadStore.getState().addDownload({
+        id: dlId,
+        songId: url,
+        title: decodeURIComponent(titleFromUrl).replace(/\.[^/.]+$/, ''),
+        status: 'downloading',
+        progress: 0,
+        speed: '...',
+        size: 0,
+    });
     try {
         // Validate URL
         try {
             new URL(url);
         } catch {
+            useDownloadStore.getState().updateDownload(dlId, { status: 'failed' });
             return { success: false, error: 'Invalid URL format' };
         }
 
@@ -42,6 +55,7 @@ export const importAudioFromUrl = async (
         const response = await fetch(url);
 
         if (!response.ok) {
+            useDownloadStore.getState().updateDownload(dlId, { status: 'failed' });
             return { success: false, error: `Failed to fetch: ${response.statusText}` };
         }
 
@@ -49,14 +63,17 @@ export const importAudioFromUrl = async (
         const contentType = response.headers.get('content-type') || 'audio/mpeg';
 
         if (!contentType.includes('audio') && !contentType.includes('video/mp4') && !url.match(/\.(mp3|wav|ogg|m4a|aac)$/i)) {
+            useDownloadStore.getState().updateDownload(dlId, { status: 'failed' });
             return { success: false, error: 'URL does not point to a valid audio file' };
         }
 
         const totalBytes = contentLength ? parseInt(contentLength, 10) : 0;
         let receivedBytes = 0;
+        const startTime = Date.now();
 
         const reader = response.body?.getReader();
         if (!reader) {
+            useDownloadStore.getState().updateDownload(dlId, { status: 'failed' });
             return { success: false, error: 'ReadableStream not supported' };
         }
 
@@ -69,11 +86,15 @@ export const importAudioFromUrl = async (
             if (value) {
                 chunks.push(value);
                 receivedBytes += value.length;
+                const elapsed = (Date.now() - startTime) / 1000;
+                const speed = elapsed > 0 ? `${(receivedBytes / 1024 / elapsed).toFixed(0)} KB/s` : '...';
                 if (totalBytes > 0) {
-                    onProgress(Math.round((receivedBytes / totalBytes) * 100));
+                    const progress = Math.round((receivedBytes / totalBytes) * 100);
+                    onProgress(progress);
+                    useDownloadStore.getState().updateDownload(dlId, { progress, speed, size: receivedBytes });
                 } else {
-                    // Indeterminate progress
                     onProgress(-1);
+                    useDownloadStore.getState().updateDownload(dlId, { speed, size: receivedBytes });
                 }
             }
         }
@@ -83,12 +104,11 @@ export const importAudioFromUrl = async (
         // Save to IndexedDB
         await saveAudioBlob(url, blob);
 
-        // Try to read duration (Hack: create object URL and read via HTMLAudioElement)
+        // Try to read duration
         const objectUrl = URL.createObjectURL(blob);
         const duration = await getAudioDuration(objectUrl);
-        URL.revokeObjectURL(objectUrl); // Clean up
+        URL.revokeObjectURL(objectUrl);
 
-        const titleFromUrl = url.split('/').pop()?.split('?')[0] || 'Unknown Track';
         let cleanTitle = decodeURIComponent(titleFromUrl).replace(/\.[^/.]+$/, "");
 
         // Save to Library Store
@@ -102,10 +122,12 @@ export const importAudioFromUrl = async (
             playCount: 0
         });
 
+        useDownloadStore.getState().updateDownload(dlId, { status: 'completed', progress: 100 });
         return { success: true };
 
     } catch (err: any) {
         console.error("Import error:", err);
+        useDownloadStore.getState().updateDownload(dlId, { status: 'failed' });
         return { success: false, error: err.message || 'An unexpected error occurred during import. (Check CORS policies)' };
     }
 };
@@ -130,6 +152,17 @@ export const importFromYouTube = async (
     onProgress: (progress: number, step: string) => void,
     metadata?: { thumbnail?: string; artist?: string }
 ): Promise<{ success: boolean; error?: string; metadata?: any }> => {
+    const dlId = `dl_yt_${Date.now()}`;
+    const songId = `yt_${videoUrl}`;
+    useDownloadStore.getState().addDownload({
+        id: dlId,
+        songId,
+        title: 'YouTube Import...',
+        status: 'downloading',
+        progress: 0,
+        speed: '...',
+        size: 0,
+    });
     try {
         onProgress(10, 'Extracting audio from YouTube...');
 
@@ -144,6 +177,7 @@ export const importFromYouTube = async (
 
         if (!res.ok) {
             const errorData = await res.json().catch(() => ({}));
+            useDownloadStore.getState().updateDownload(dlId, { status: 'failed' });
             return { success: false, error: (errorData as any).error || `Server error: ${res.status}` };
         }
 
@@ -153,16 +187,21 @@ export const importFromYouTube = async (
         const duration = res.headers.get('X-Duration') || '0:00';
         const contentLength = parseInt(res.headers.get('Content-Length') || '0', 10);
 
+        // Update download title now that we know it
+        useDownloadStore.getState().updateDownload(dlId, { title });
+
         // Stream the response body with progress
         const reader = res.body?.getReader();
         if (!reader) {
+            useDownloadStore.getState().updateDownload(dlId, { status: 'failed' });
             return { success: false, error: 'ReadableStream not supported' };
         }
 
         const chunks: Uint8Array[] = [];
         let receivedBytes = 0;
         let lastProgressPulse = Date.now();
-        const totalBytes = contentLength; // Renaming for clarity with existing logic
+        const totalBytes = contentLength;
+        const startTime = Date.now();
 
         while (true) {
             const { done, value } = await reader.read();
@@ -171,16 +210,19 @@ export const importFromYouTube = async (
             if (value) {
                 chunks.push(value);
                 receivedBytes += value.length;
+                const elapsed = (Date.now() - startTime) / 1000;
+                const speed = elapsed > 0 ? `${(receivedBytes / 1024 / elapsed).toFixed(0)} KB/s` : '...';
                 if (totalBytes > 0) {
-                    // Throttle progress updates a bit
                     const now = Date.now();
                     if (now - lastProgressPulse > 200) {
                         lastProgressPulse = now;
                         const percent = Math.min(10 + Math.round((receivedBytes / totalBytes) * 85), 95);
                         onProgress(percent, 'Downloading audio...');
+                        useDownloadStore.getState().updateDownload(dlId, { progress: percent, speed, size: receivedBytes });
                     }
                 } else {
-                    onProgress(-1, 'Downloading audio...'); // Indeterminate
+                    onProgress(-1, 'Downloading audio...');
+                    useDownloadStore.getState().updateDownload(dlId, { speed, size: receivedBytes });
                 }
             }
         }
@@ -188,9 +230,6 @@ export const importFromYouTube = async (
         onProgress(98, 'Finalizing audio...');
 
         const blob = new Blob(chunks as BlobPart[], { type: 'audio/mpeg' });
-
-        // Use a unique ID based on the YouTube URL
-        const songId = `yt_${videoUrl}`;
 
         // Save to IndexedDB
         await saveAudioBlob(songId, blob);
@@ -219,7 +258,7 @@ export const importFromYouTube = async (
             id: songId,
             title: title,
             originalUrl: videoUrl,
-            duration: parseFloat(duration) || 0, // Ensure duration is a number for the store
+            duration: parseFloat(duration) || 0,
             size: receivedBytes,
             dateAdded: Date.now(),
             playCount: 0,
@@ -228,10 +267,12 @@ export const importFromYouTube = async (
         });
 
         onProgress(100, 'Download complete!');
+        useDownloadStore.getState().updateDownload(dlId, { status: 'completed', progress: 100 });
         return { success: true };
 
     } catch (err: any) {
         console.error('YouTube import error:', err);
+        useDownloadStore.getState().updateDownload(dlId, { status: 'failed' });
         return { success: false, error: err.message || 'Failed to extract audio from YouTube.' };
     }
 };
