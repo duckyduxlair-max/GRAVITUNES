@@ -7,6 +7,7 @@ import { usePlayerStore } from '../store/playerStore';
 import { useNavigate } from 'react-router-dom';
 import { THEMES } from '../components/ThemeProvider';
 import { useDownloadStore } from '../store/downloadStore';
+import { sleepTimerService } from '../services/sleepTimerService';
 import { exportLibraryBackup, importLibraryBackup } from '../services/backupService';
 
 const formatBytes = (bytes: number): string => {
@@ -28,10 +29,9 @@ const Settings: React.FC = () => {
     const backupInputRef = useRef<HTMLInputElement>(null);
     const [backupStatus, setBackupStatus] = useState<string | null>(null);
 
-    // ─── Sleep Timer ───
-    const [sleepMinutes, setSleepMinutes] = useState(0);
-    const [sleepRemaining, setSleepRemaining] = useState(0);
-    const sleepRef = useRef<ReturnType<typeof setInterval> | null>(null);
+    // ─── Sleep Timer (global service) ───
+    const [sleepMinutes, setSleepMinutes] = useState(sleepTimerService.getTotalMinutes());
+    const [sleepRemaining, setSleepRemaining] = useState(sleepTimerService.getRemaining());
     const [customMinutes, setCustomMinutes] = useState('');
 
     // Gravi voice assistant toggle
@@ -62,36 +62,20 @@ const Settings: React.FC = () => {
     };
 
     const startSleepTimer = (minutes: number) => {
-        if (sleepRef.current) clearInterval(sleepRef.current);
-        setSleepMinutes(minutes);
-        setSleepRemaining(minutes * 60);
-        sleepRef.current = setInterval(() => {
-            setSleepRemaining(prev => {
-                if (prev <= 1) {
-                    clearInterval(sleepRef.current!);
-                    sleepRef.current = null;
-                    setSleepMinutes(0);
-                    // Stop playback smoothly
-                    usePlayerStore.getState().setIsPlaying(false);
-                    // Try to shut down server
-                    const API_BASE = import.meta.env.VITE_API_URL || '/api';
-                    fetch(`${API_BASE}/shutdown`, { method: 'POST' }).catch(() => { });
-                    return 0;
-                }
-                return prev - 1;
-            });
-        }, 1000);
+        sleepTimerService.start(minutes);
     };
 
     const cancelSleepTimer = () => {
-        if (sleepRef.current) clearInterval(sleepRef.current);
-        sleepRef.current = null;
-        setSleepMinutes(0);
-        setSleepRemaining(0);
+        sleepTimerService.cancel();
     };
 
+    // Subscribe to global timer updates
     useEffect(() => {
-        return () => { if (sleepRef.current) clearInterval(sleepRef.current); };
+        const unsub = sleepTimerService.subscribe((remaining, total) => {
+            setSleepRemaining(remaining);
+            setSleepMinutes(total);
+        });
+        return unsub;
     }, []);
 
     const formatSleepTime = (seconds: number) => {
