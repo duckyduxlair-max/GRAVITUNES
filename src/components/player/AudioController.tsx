@@ -63,7 +63,7 @@ const updateMediaSession = async (title: string, artist: string, thumbnail?: str
     }
 
     navigator.mediaSession.metadata = new MediaMetadata({
-        title: title,
+        title: `GraviTunes – ${title}`,
         artist: artist || 'GraviTunes',
         album: 'GraviTunes',
         artwork: artworks,
