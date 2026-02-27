@@ -631,98 +631,180 @@ def action_logs():
     return
 
 def action_update():
-    """OTA Update from GitHub repository."""
+    """OTA Update from GitHub repository — Termux-aware."""
     print_header()
     GITHUB_REPO = "https://github.com/duckyduxlair-max/GRAVITUNES.git"
+    TERMUX_HOME = Path("/data/data/com.termux/files/home")
+    
+    is_termux = TERMUX_HOME.exists() or "/com.termux" in str(PROJECT_DIR).lower()
+    
+    # Determine install target
+    if is_termux:
+        install_dir = TERMUX_HOME / "GRAVITUNES"
+    else:
+        install_dir = PROJECT_DIR
     
     log(f"{C.BOLD}GraviTunes OTA Update System{C.END}")
     print(f"   {C.DIM}Repository: {GITHUB_REPO}{C.END}")
+    print(f"   {C.DIM}Target:     {install_dir}{C.END}")
+    print(f"   {C.DIM}Platform:   {'Termux' if is_termux else 'PC / Desktop'}{C.END}")
     print(f"   {C.DIM}{'─'*40}{C.END}")
     
     # Check if git is available
     if not check_dep('git'):
         error("git is not installed! Install git first.")
-        warn("On Termux: pkg install git")
-        warn("On Windows: Download from https://git-scm.com")
+        if is_termux:
+            warn("Run: pkg install git")
+        else:
+            warn("Download from https://git-scm.com")
         input(f"\n{C.CYAN}Press Enter to return...{C.END}")
         return
+    
+    # Detect fresh install vs update
+    is_fresh = not (install_dir / "package.json").exists()
+    
+    if is_fresh:
+        log(f"{C.YELLOW}Fresh install detected.{C.END}")
+        print(f"\n   This will download GraviTunes to:")
+        print(f"   {C.GREEN}{install_dir}{C.END}\n")
+    else:
+        log(f"{C.GREEN}Existing installation found. Updating...{C.END}")
     
     # Backup cookies before update
+    cookies_file_target = install_dir / "server" / "cookies.txt"
     cookies_backup = None
-    if COOKIES_FILE.exists():
+    if cookies_file_target.exists() and cookies_file_target.stat().st_size > 10:
         success("Backing up cookies.txt...")
-        cookies_backup = COOKIES_FILE.read_text(encoding='utf-8')
+        cookies_backup = cookies_file_target.read_text(encoding='utf-8')
     
-    confirm = input(f"\n   {C.YELLOW}This will update to latest version. Continue? (y/N): {C.END}").strip().lower()
+    confirm = input(f"\n   {C.YELLOW}{'Install' if is_fresh else 'Update'} GraviTunes? (y/N): {C.END}").strip().lower()
     if confirm != 'y':
-        warn("Update cancelled.")
+        warn("Cancelled.")
         input(f"\n{C.CYAN}Press Enter to return...{C.END}")
         return
     
-    # Create temp directory for clone
     import tempfile
-    temp_dir = Path(tempfile.mkdtemp(prefix='gravitunes_update_'))
     
     try:
-        # Clone repository
-        log("Cloning latest version from GitHub...")
-        spinner_wait("Downloading repository...", 1)
-        result = subprocess.run(
-            f'git clone --depth 1 "{GITHUB_REPO}" "{temp_dir / "repo"}"',
-            shell=True, capture_output=True, text=True
-        )
-        if result.returncode != 0:
-            error(f"Clone failed: {result.stderr}")
-            input(f"\n{C.CYAN}Press Enter to return...{C.END}")
-            return
-        
-        success("Repository cloned successfully.")
-        
-        # Find the actual project directory in the clone
-        clone_dir = temp_dir / "repo"
-        # Check if vite-project is nested
-        if (clone_dir / "vite-project").exists():
-            source_dir = clone_dir / "vite-project"
-        elif (clone_dir / "package.json").exists():
-            source_dir = clone_dir
-        else:
-            error("Could not find project files in repository.")
-            input(f"\n{C.CYAN}Press Enter to return...{C.END}")
-            return
-        
-        # Copy files (preserving node_modules and dist)
-        log("Merging updated files...")
-        skip_dirs = {'node_modules', 'dist', '.git', 'logs', 'temp'}
-        updated_count = 0
-        
-        for item in source_dir.rglob('*'):
-            rel_path = item.relative_to(source_dir)
-            # Skip protected directories
-            if any(part in skip_dirs for part in rel_path.parts):
-                continue
+        if is_fresh:
+            # ─── FRESH INSTALL: Clone directly to target ───
+            log(f"Cloning GraviTunes to {install_dir}...")
+            spinner_wait("Downloading from GitHub...", 1.5)
             
-            dest = PROJECT_DIR / rel_path
-            if item.is_file():
-                dest.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(item, dest)
-                updated_count += 1
-        
-        success(f"Updated {updated_count} files.")
-        
-        # Restore cookies
-        if cookies_backup:
-            COOKIES_FILE.write_text(cookies_backup, encoding='utf-8')
-            success("Cookies restored.")
-        
-        # Cleanup temp
-        shutil.rmtree(temp_dir, ignore_errors=True)
-        
-        success(f"\n✨ UPDATE COMPLETE! {updated_count} files updated.")
-        log("Run Setup (Option 3) to rebuild after update.")
+            # Remove target if it exists but is empty/broken
+            if install_dir.exists():
+                shutil.rmtree(install_dir, ignore_errors=True)
+            
+            result = subprocess.run(
+                f'git clone --depth 1 "{GITHUB_REPO}" "{install_dir}"',
+                shell=True, capture_output=True, text=True
+            )
+            if result.returncode != 0:
+                error(f"Clone failed: {result.stderr}")
+                input(f"\n{C.CYAN}Press Enter to return...{C.END}")
+                return
+            
+            success("Repository cloned successfully!")
+            
+            # Ask user to paste cookies
+            print(f"\n   {C.YELLOW}{C.BOLD}YouTube Cookies Setup{C.END}")
+            print(f"   {C.DIM}Paste your Netscape-format cookies below.{C.END}")
+            print(f"   {C.DIM}Press Enter on empty line when finished.{C.END}")
+            print(f"   {C.DIM}(Skip by pressing Enter immediately){C.END}")
+            print(f"   {'─'*30}")
+            
+            lines = []
+            while True:
+                try:
+                    line = input()
+                    if not line:
+                        break
+                    lines.append(line + "\n")
+                except EOFError:
+                    break
+            
+            if lines:
+                cookies_path = install_dir / "server" / "cookies.txt"
+                cookies_path.parent.mkdir(parents=True, exist_ok=True)
+                with open(cookies_path, "w", encoding='utf-8') as f:
+                    f.writelines(lines)
+                success(f"Cookies saved to {cookies_path}")
+            else:
+                warn("No cookies provided. Add them later via Option 4.")
+            
+            print(f"\n   {C.DIM}{'─'*40}{C.END}")
+            success(f"\n✨ FRESH INSTALL COMPLETE!")
+            print(f"\n   {C.BOLD}Next steps:{C.END}")
+            print(f"   {C.CYAN}cd {install_dir}{C.END}")
+            print(f"   {C.CYAN}python deploy.py{C.END}")
+            print(f"   Then choose {C.GREEN}[3] System Setup{C.END} to install dependencies.")
+            
+        else:
+            # ─── UPDATE: Clone to temp, merge files ───
+            temp_dir = Path(tempfile.mkdtemp(prefix='gravitunes_update_'))
+            
+            log("Cloning latest version from GitHub...")
+            spinner_wait("Downloading updates...", 1)
+            result = subprocess.run(
+                f'git clone --depth 1 "{GITHUB_REPO}" "{temp_dir / "repo"}"',
+                shell=True, capture_output=True, text=True
+            )
+            if result.returncode != 0:
+                error(f"Clone failed: {result.stderr}")
+                shutil.rmtree(temp_dir, ignore_errors=True)
+                input(f"\n{C.CYAN}Press Enter to return...{C.END}")
+                return
+            
+            success("Repository cloned.")
+            
+            # Find source directory
+            clone_dir = temp_dir / "repo"
+            if (clone_dir / "vite-project").exists():
+                source_dir = clone_dir / "vite-project"
+            elif (clone_dir / "package.json").exists():
+                source_dir = clone_dir
+            else:
+                error("Could not find project files in repository.")
+                shutil.rmtree(temp_dir, ignore_errors=True)
+                input(f"\n{C.CYAN}Press Enter to return...{C.END}")
+                return
+            
+            # Merge files (skip protected dirs)
+            log("Merging updated files...")
+            skip_dirs = {'node_modules', 'dist', '.git', 'logs', 'temp'}
+            skip_files = {'cookies.txt'}  # Never overwrite cookies
+            updated_count = 0
+            
+            for item in source_dir.rglob('*'):
+                rel_path = item.relative_to(source_dir)
+                if any(part in skip_dirs for part in rel_path.parts):
+                    continue
+                if rel_path.name in skip_files:
+                    continue
+                
+                dest = install_dir / rel_path
+                if item.is_file():
+                    dest.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(item, dest)
+                    updated_count += 1
+            
+            success(f"Updated {updated_count} files.")
+            
+            # Restore cookies
+            if cookies_backup:
+                cookies_file_target.parent.mkdir(parents=True, exist_ok=True)
+                cookies_file_target.write_text(cookies_backup, encoding='utf-8')
+                success("Cookies restored.")
+            
+            # Cleanup
+            shutil.rmtree(temp_dir, ignore_errors=True)
+            
+            print(f"\n   {C.DIM}{'─'*40}{C.END}")
+            success(f"\n✨ UPDATE COMPLETE! {updated_count} files updated.")
+            log("Run Setup (Option 3) to rebuild after update.")
         
     except Exception as e:
-        error(f"Update failed: {e}")
-        shutil.rmtree(temp_dir, ignore_errors=True)
+        error(f"Operation failed: {e}")
     
     input(f"\n{C.CYAN}Press Enter to return to menu...{C.END}")
 
