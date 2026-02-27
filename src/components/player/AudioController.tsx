@@ -229,7 +229,13 @@ const AudioController: React.FC = () => {
     }, [volume]);
 
     // ── Sync playback state ──
+    // Only handle PAUSE requests here; PLAY on new source is handled by the source loader
+    const sourceLoadingRef = useRef(false);
+
     useEffect(() => {
+        // If source is being loaded, don't race it — the source loader will call play()
+        if (sourceLoadingRef.current) return;
+
         if (isPlaying) {
             if (audioContextRef.current?.state === 'suspended') {
                 audioContextRef.current.resume().then(() => {
@@ -253,6 +259,8 @@ const AudioController: React.FC = () => {
     // ── Source manager with null-state recovery ──
     useEffect(() => {
         const loadAudio = async () => {
+            sourceLoadingRef.current = true;
+
             // Revoke previous blob URL to free memory
             if (prevBlobUrlRef.current) {
                 URL.revokeObjectURL(prevBlobUrlRef.current);
@@ -265,6 +273,7 @@ const AudioController: React.FC = () => {
             if (currentStreamUrl) {
                 globalAudio.src = currentStreamUrl;
                 globalAudio.load();
+                sourceLoadingRef.current = false;
                 if (isPlaying) globalAudio.play().catch(console.error);
 
                 // Update media session for streams
@@ -278,8 +287,8 @@ const AudioController: React.FC = () => {
             }
 
             if (!currentSongId) {
+                sourceLoadingRef.current = false;
                 // ── NULL STATE FAIL-SAFE ──
-                // If both are null and we were supposed to be playing, auto-recover
                 const state = usePlayerStore.getState();
                 if (state.isPlaying) {
                     const { songs } = useLibraryStore.getState();
@@ -296,6 +305,7 @@ const AudioController: React.FC = () => {
 
             // Try loading from IndexedDB (downloaded song)
             const blob = await getAudioBlob(currentSongId);
+            sourceLoadingRef.current = false;
             if (blob) {
                 const objectUrl = URL.createObjectURL(blob);
                 prevBlobUrlRef.current = objectUrl;
