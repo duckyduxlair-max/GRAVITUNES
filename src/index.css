@@ -595,3 +595,64 @@ input[type="range"]::-moz-range-thumb {
 [data-theme="light"] input[type="range"]::-moz-range-track {
   background: rgba(0, 0, 0, 0.08);
 }
+
+/* ── Light Theme: NowPlaying icon & text fixes ── */
+[data-theme="light"] .text-white {
+  color: #1a1a1a !important;
+}
+
+[data-theme="light"] .text-white\/80 {
+  color: rgba(26, 26, 26, 0.8) !important;
+}
+
+[data-theme="light"] .text-white\/50 {
+  color: rgba(26, 26, 26, 0.5) !important;
+}
+
+[data-theme="light"] .text-white\/40 {
+  color: rgba(26, 26, 26, 0.4) !important;
+}
+
+[data-theme="light"] .text-white\/30 {
+  color: rgba(26, 26, 26, 0.3) !important;
+}
+
+[data-theme="light"] .text-white\/20 {
+  color: rgba(26, 26, 26, 0.2) !important;
+}
+
+[data-theme="light"] .bg-white\/5 {
+  background-color: rgba(0, 0, 0, 0.05) !important;
+}
+
+[data-theme="light"] .bg-white\/3 {
+  background-color: rgba(0, 0, 0, 0.03) !important;
+}
+
+[data-theme="light"] .bg-white\/10 {
+  background-color: rgba(0, 0, 0, 0.08) !important;
+}
+
+[data-theme="light"] .border-white\/5 {
+  border-color: rgba(0, 0, 0, 0.06) !important;
+}
+
+[data-theme="light"] .border-white\/10 {
+  border-color: rgba(0, 0, 0, 0.1) !important;
+}
+
+[data-theme="light"] .border-white\/20 {
+  border-color: rgba(0, 0, 0, 0.15) !important;
+}
+
+[data-theme="light"] .hover\:text-white:hover {
+  color: #1a1a1a !important;
+}
+
+[data-theme="light"] .hover\:text-white\/40:hover {
+  color: rgba(26, 26, 26, 0.5) !important;
+}
+
+[data-theme="light"] .hover\:bg-white\/10:hover {
+  background-color: rgba(0, 0, 0, 0.08) !important;
+}

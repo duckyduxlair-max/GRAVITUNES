@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { Trash2, Palette, ChevronRight, HardDrive, RefreshCw, Upload, Shield, RotateCcw, Sparkles, Download, Moon, Archive, CheckCircle, XCircle, AlertCircle, Loader2, Headphones, Type } from 'lucide-react';
+import { Trash2, Palette, ChevronRight, HardDrive, RefreshCw, Upload, Shield, RotateCcw, Sparkles, Download, Moon, Archive, CheckCircle, XCircle, AlertCircle, Loader2, Headphones, Type, X } from 'lucide-react';
 import { useUIStore } from '../store/uiStore';
 import { clearAllAudio, getStorageStats } from '../services/db';
 import PageTransition from '../components/layout/PageTransition';
@@ -8,8 +8,10 @@ import { useNavigate } from 'react-router-dom';
 import { THEMES } from '../components/ThemeProvider';
 import { useDownloadStore } from '../store/downloadStore';
 import { exportLibraryBackup, importLibraryBackup } from '../services/backupService';
+import { cancelDownload } from '../services/audioService';
 import { startSleepTimer as globalStartSleep, cancelSleepTimer as globalCancelSleep, getSleepState, onSleepChange } from '../services/sleepTimer';
 import { setPreset, getPreset, getAvailablePresets } from '../services/audioEnhancement';
+import { isLyricsDownloadEnabled, setLyricsDownloadEnabled } from '../services/lyricsService';
 
 const formatBytes = (bytes: number): string => {
     if (bytes === 0) return '0 B';
@@ -36,6 +38,8 @@ const Settings: React.FC = () => {
     const backupInputRef = useRef<HTMLInputElement>(null);
     const [backupStatus, setBackupStatus] = useState<string | null>(null);
     const [activePreset, setActivePreset] = useState(() => getPreset());
+    const [lyricsDownloadEnabled, setLyricsDownloadEnabled_] = useState(() => isLyricsDownloadEnabled());
+    const setLyricsDownloadFn = setLyricsDownloadEnabled;
 
     // ─── Sleep Timer (global — persists across tabs) ───
     const [sleepState, setSleepState] = useState(getSleepState());
@@ -303,6 +307,15 @@ const Settings: React.FC = () => {
                                                     }`}>{dl.status}</p>
                                             )}
                                         </div>
+                                        {dl.status === 'downloading' && (
+                                            <button
+                                                onClick={() => cancelDownload(dl.id)}
+                                                className="w-7 h-7 rounded-full flex items-center justify-center shrink-0 bg-red-500/10 hover:bg-red-500/20 text-red-400 transition-all active:scale-90"
+                                                title="Cancel download"
+                                            >
+                                                <X size={13} />
+                                            </button>
+                                        )}
                                     </div>
                                 ))}
                             </div>
@@ -480,6 +493,29 @@ const Settings: React.FC = () => {
                         <p className="text-[9px] text-zinc-600 text-center">
                             {getAvailablePresets().find(p => p.id === activePreset)?.description || 'Standard audio'}
                         </p>
+                    </section>
+
+                    {/* ─── Lyrics Settings ─── */}
+                    <section className="glass-panel rounded-2xl p-5 space-y-3">
+                        <div className="flex items-center gap-3">
+                            <div className="w-9 h-9 rounded-xl bg-accent/10 flex items-center justify-center shrink-0">
+                                <span className="text-lg">🎵</span>
+                            </div>
+                            <div className="flex-1">
+                                <h3 className="text-white font-medium text-sm">Downloaded Song Lyrics</h3>
+                                <p className="text-zinc-600 text-[11px] mt-0.5">Auto-save lyrics offline for downloaded songs</p>
+                            </div>
+                            <button
+                                onClick={() => {
+                                    const current = lyricsDownloadEnabled;
+                                    setLyricsDownloadEnabled_(!current);
+                                    setLyricsDownloadFn(!current);
+                                }}
+                                className={`w-12 h-7 rounded-full transition-all relative ${lyricsDownloadEnabled ? 'bg-accent' : 'bg-white/10'}`}
+                            >
+                                <div className={`absolute top-1 left-1 w-5 h-5 rounded-full bg-white shadow-md transition-transform ${lyricsDownloadEnabled ? 'translate-x-5' : ''}`} />
+                            </button>
+                        </div>
                     </section>
 
                     {/* ─── About ─── */}

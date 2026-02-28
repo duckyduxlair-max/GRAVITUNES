@@ -1,8 +1,20 @@
-import { saveAudioBlob, getAudioBlob } from './db';
+import { saveAudioBlob, getAudioBlob, deleteAudioBlob } from './db';
 import { useLibraryStore } from '../store/libraryStore';
 import { useDownloadStore } from '../store/downloadStore';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+
+// ─── Download Cancellation Registry ───
+const activeControllers = new Map<string, AbortController>();
+
+export function cancelDownload(dlId: string) {
+    const ctrl = activeControllers.get(dlId);
+    if (ctrl) {
+        ctrl.abort();
+        activeControllers.delete(dlId);
+    }
+    useDownloadStore.getState().updateDownload(dlId, { status: 'cancelled' });
+}
 
 /**
  * Download a song from IndexedDB to the user's device as an MP3 file.
@@ -32,6 +44,8 @@ export const importAudioFromUrl = async (
     onProgress: (progress: number) => void
 ): Promise<{ success: boolean; error?: string }> => {
     const dlId = `dl_url_${Date.now()}`;
+    const abortCtrl = new AbortController();
+    activeControllers.set(dlId, abortCtrl);
     const titleFromUrl = url.split('/').pop()?.split('?')[0] || 'Unknown Track';
     useDownloadStore.getState().addDownload({
         id: dlId,
@@ -47,12 +61,13 @@ export const importAudioFromUrl = async (
         try {
             new URL(url);
         } catch {
+            activeControllers.delete(dlId);
             useDownloadStore.getState().updateDownload(dlId, { status: 'failed' });
             return { success: false, error: 'Invalid URL format' };
         }
 
         // Fetching the blob
-        const response = await fetch(url);
+        const response = await fetch(url, { signal: abortCtrl.signal });
 
         if (!response.ok) {
             useDownloadStore.getState().updateDownload(dlId, { status: 'failed' });
@@ -122,13 +137,16 @@ export const importAudioFromUrl = async (
             playCount: 0
         });
 
+        activeControllers.delete(dlId);
         useDownloadStore.getState().updateDownload(dlId, { status: 'completed', progress: 100 });
         return { success: true };
 
     } catch (err: any) {
+        activeControllers.delete(dlId);
         console.error("Import error:", err);
-        useDownloadStore.getState().updateDownload(dlId, { status: 'failed' });
-        return { success: false, error: err.message || 'An unexpected error occurred during import. (Check CORS policies)' };
+        const cancelled = err.name === 'AbortError';
+        useDownloadStore.getState().updateDownload(dlId, { status: cancelled ? 'cancelled' : 'failed' });
+        return { success: false, error: cancelled ? 'Download cancelled' : (err.message || 'An unexpected error occurred during import.') };
     }
 };
 
@@ -154,6 +172,8 @@ export const importFromYouTube = async (
 ): Promise<{ success: boolean; error?: string; metadata?: any }> => {
     const dlId = `dl_yt_${Date.now()}`;
     const songId = `yt_${videoUrl}`;
+    const abortCtrl = new AbortController();
+    activeControllers.set(dlId, abortCtrl);
     useDownloadStore.getState().addDownload({
         id: dlId,
         songId,
@@ -173,6 +193,7 @@ export const importFromYouTube = async (
                 'Content-Type': 'application/json',
             },
             body: JSON.stringify({ url: videoUrl }),
+            signal: abortCtrl.signal,
         });
 
         if (!res.ok) {
@@ -267,13 +288,17 @@ export const importFromYouTube = async (
         });
 
         onProgress(100, 'Download complete!');
+        activeControllers.delete(dlId);
         useDownloadStore.getState().updateDownload(dlId, { status: 'completed', progress: 100 });
         return { success: true };
 
     } catch (err: any) {
+        activeControllers.delete(dlId);
         console.error('YouTube import error:', err);
-        useDownloadStore.getState().updateDownload(dlId, { status: 'failed' });
-        return { success: false, error: err.message || 'Failed to extract audio from YouTube.' };
+        const cancelled = err.name === 'AbortError';
+        useDownloadStore.getState().updateDownload(dlId, { status: cancelled ? 'cancelled' : 'failed' });
+        if (cancelled) await deleteAudioBlob(songId).catch(() => { });
+        return { success: false, error: cancelled ? 'Download cancelled' : (err.message || 'Failed to extract audio from YouTube.') };
     }
 };
 

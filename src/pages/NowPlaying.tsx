@@ -14,7 +14,7 @@ import { useDownloadStore } from '../store/downloadStore';
 
 import { globalAnalyzer } from '../hooks/useAudioPlayer';
 import { globalAudio } from '../components/player/AudioController';
-import { fetchLyrics, getActiveLine, type LyricsResult } from '../services/lyricsService';
+import { fetchLyrics, getActiveLine, getOfflineLyrics, saveLyricsOffline, isLyricsDownloadEnabled, type LyricsResult } from '../services/lyricsService';
 
 const NowPlaying: React.FC = () => {
     const {
@@ -156,18 +156,39 @@ const NowPlaying: React.FC = () => {
     const [showLyrics, setShowLyrics] = useState(false);
     const lyricsContainerRef = useRef<HTMLDivElement>(null);
 
-    // Fetch lyrics when song changes
+    // Fetch lyrics when song changes — strict matching, offline-first for downloads
     useEffect(() => {
+        // Clear IMMEDIATELY to prevent stale lyrics from previous song showing
         setLyrics(null);
         setActiveLine(-1);
         if (!song?.title) return;
 
         let cancelled = false;
-        fetchLyrics(song.title, song.artist).then(result => {
-            if (!cancelled) setLyrics(result);
-        });
+
+        const loadLyrics = async () => {
+            // 1. Check offline storage first (for downloaded songs)
+            if (songId) {
+                const offline = getOfflineLyrics(songId);
+                if (offline && !cancelled) {
+                    setLyrics(offline);
+                    return;
+                }
+            }
+
+            // 2. Fetch from API with strict matching (title + artist + duration)
+            const result = await fetchLyrics(song.title, song.artist, (song as any).duration);
+            if (cancelled) return;
+            setLyrics(result);
+
+            // 3. If lyrics found & download enabled & song is downloaded, save offline
+            if (result.source !== 'none' && songId && songs[songId] && isLyricsDownloadEnabled()) {
+                saveLyricsOffline(songId, result);
+            }
+        };
+
+        loadLyrics();
         return () => { cancelled = true; };
-    }, [song?.title, song?.artist]);
+    }, [song?.title, song?.artist, songId]);
 
     // Sync active line with audio time
     useEffect(() => {
