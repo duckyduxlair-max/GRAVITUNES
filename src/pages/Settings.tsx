@@ -21,12 +21,6 @@ const formatBytes = (bytes: number): string => {
     return `${(bytes / Math.pow(k, i)).toFixed(1)} ${sizes[i]}`;
 };
 
-const formatSleepTime = (seconds: number): string => {
-    const m = Math.floor(seconds / 60);
-    const s = seconds % 60;
-    return `${m}:${s.toString().padStart(2, '0')}`;
-};
-
 const Settings: React.FC = () => {
     const { showPets, togglePets, avatarUrl, setAvatarUrl, theme } = useUIStore();
     const fileInputRef = useRef<HTMLInputElement>(null);
