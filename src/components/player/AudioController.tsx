@@ -239,15 +239,24 @@ const AudioController: React.FC = () => {
     }, [volume]);
 
     // ── Sync playback state ──
-    // Only handle PAUSE requests here; PLAY on new source is handled by the source loader
+    // Only manages pause/resume. PLAY on NEW source is handled by the source loader.
     const sourceLoadingRef = useRef(false);
+    const lastSourceRef = useRef<string | null>(null);
 
     useEffect(() => {
-        // If source is being loaded, don't race it — the source loader will call play()
+        // If source is being loaded, skip — source loader calls play()
         if (sourceLoadingRef.current) return;
 
-        // Don't try to play on empty source — source loader will handle it
-        if (isPlaying && !globalAudio.src) return;
+        // Detect source change: if currentSongId or currentStreamUrl changed since last render,
+        // let the source loader handle play()
+        const currentSource = currentSongId || currentStreamUrl || null;
+        if (currentSource !== lastSourceRef.current) {
+            lastSourceRef.current = currentSource;
+            return; // Source loader will handle play for new source
+        }
+
+        // No media loaded yet — nothing to play/pause
+        if (globalAudio.readyState === 0) return;
 
         if (isPlaying) {
             if (audioContextRef.current?.state === 'suspended') {
@@ -264,7 +273,7 @@ const AudioController: React.FC = () => {
         if ('mediaSession' in navigator) {
             navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
         }
-    }, [isPlaying, setIsPlaying]);
+    }, [isPlaying, setIsPlaying, currentSongId, currentStreamUrl]);
 
     // ── Track play counts ──
     const countedSongsRef = useRef<Set<string>>(new Set());

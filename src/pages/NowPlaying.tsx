@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { usePlayerStore } from '../store/playerStore';
 import { useLibraryStore } from '../store/libraryStore';
 import { useUIStore } from '../store/uiStore';
-import { Play, Pause, SkipBack, SkipForward, ChevronDown, Heart, Shuffle, Repeat, ListPlus, Eye, EyeOff, Share2 } from 'lucide-react';
+import { Play, Pause, SkipBack, SkipForward, ChevronDown, Heart, Shuffle, Repeat, ListPlus, Eye, EyeOff, Share2, Music } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import PageTransition from '../components/layout/PageTransition';
 import WaveProgress from '../components/player/WaveProgress';
@@ -13,6 +13,8 @@ import { getAudioDuration } from '../services/audioService';
 import { useDownloadStore } from '../store/downloadStore';
 
 import { globalAnalyzer } from '../hooks/useAudioPlayer';
+import { globalAudio } from '../components/player/AudioController';
+import { fetchLyrics, getActiveLine, type LyricsResult } from '../services/lyricsService';
 
 const NowPlaying: React.FC = () => {
     const {
@@ -147,6 +149,43 @@ const NowPlaying: React.FC = () => {
 
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const [_isDownloading, setIsDownloading] = useState(false);
+
+    // ─── Lyrics ───
+    const [lyrics, setLyrics] = useState<LyricsResult | null>(null);
+    const [activeLine, setActiveLine] = useState(-1);
+    const [showLyrics, setShowLyrics] = useState(false);
+    const lyricsContainerRef = useRef<HTMLDivElement>(null);
+
+    // Fetch lyrics when song changes
+    useEffect(() => {
+        setLyrics(null);
+        setActiveLine(-1);
+        if (!song?.title) return;
+
+        let cancelled = false;
+        fetchLyrics(song.title, song.artist).then(result => {
+            if (!cancelled) setLyrics(result);
+        });
+        return () => { cancelled = true; };
+    }, [song?.title, song?.artist]);
+
+    // Sync active line with audio time
+    useEffect(() => {
+        if (!lyrics?.synced || !showLyrics || !isPlaying) return;
+
+        const interval = setInterval(() => {
+            const idx = getActiveLine(lyrics.synced!, globalAudio.currentTime);
+            setActiveLine(prev => {
+                if (prev !== idx && idx >= 0 && lyricsContainerRef.current) {
+                    const el = lyricsContainerRef.current.children[idx] as HTMLElement;
+                    el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+                return idx;
+            });
+        }, 200);
+
+        return () => clearInterval(interval);
+    }, [lyrics, showLyrics, isPlaying]);
 
     const toggleFavorite = (e: React.MouseEvent) => {
         e.stopPropagation();
@@ -429,6 +468,13 @@ const NowPlaying: React.FC = () => {
 
                         <div className="flex gap-3">
                             <button
+                                onClick={() => setShowLyrics(!showLyrics)}
+                                className={`w-9 h-9 rounded-full flex items-center justify-center transition-all ${showLyrics ? 'bg-accent/10 text-accent border border-accent/20' : 'bg-white/5 text-white/20'}`}
+                                title="Lyrics"
+                            >
+                                <Music size={16} />
+                            </button>
+                            <button
                                 onClick={togglePets}
                                 className={`w-9 h-9 rounded-full flex items-center justify-center transition-all ${showPets ? 'bg-accent/10 text-accent border border-accent/20' : 'bg-white/5 text-white/20'}`}
                             >
@@ -447,6 +493,41 @@ const NowPlaying: React.FC = () => {
                         </div>
                     </div>
                 </div>
+
+                {/* Lyrics Panel */}
+                {showLyrics && (
+                    <div className="w-full mt-4 glass-panel rounded-2xl p-4 max-h-[35dvh] overflow-hidden relative">
+                        <h4 className="text-[10px] font-bold tracking-[0.2em] text-accent/60 uppercase mb-3 text-center">Lyrics</h4>
+                        {!lyrics ? (
+                            <p className="text-zinc-500 text-xs text-center animate-pulse">Searching lyrics...</p>
+                        ) : lyrics.synced ? (
+                            <div ref={lyricsContainerRef} className="overflow-y-auto max-h-[28dvh] space-y-3 scrollbar-hide px-2 scroll-smooth">
+                                {lyrics.synced.map((line, i) => (
+                                    <p
+                                        key={i}
+                                        className={`text-center text-sm font-['Outfit'] transition-all duration-300 leading-relaxed ${i === activeLine
+                                            ? 'text-accent font-bold text-base scale-105'
+                                            : i < activeLine
+                                                ? 'text-white/20'
+                                                : 'text-white/40'
+                                            }`}
+                                    >
+                                        {line.text}
+                                    </p>
+                                ))}
+                            </div>
+                        ) : lyrics.plain ? (
+                            <div className="overflow-y-auto max-h-[28dvh] scrollbar-hide px-2">
+                                <p className="text-white/50 text-xs text-center whitespace-pre-line leading-relaxed font-['Outfit']">
+                                    {lyrics.plain}
+                                </p>
+                            </div>
+                        ) : (
+                            <p className="text-zinc-600 text-xs text-center">No lyrics found for this track</p>
+                        )}
+                        <p className="text-[8px] text-zinc-700 text-center mt-2">via lrclib.net</p>
+                    </div>
+                )}
 
                 {/* Playlist Modal Integration */}
                 {playlistModalOpen && currentSongId && (
