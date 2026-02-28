@@ -1,4 +1,31 @@
 import { useLibraryStore } from '../store/libraryStore';
+import { importFromYouTube } from './audioService';
+import { getAudioBlob } from './db';
+
+/**
+ * Background download for restored songs that have YouTube URLs but no local audio.
+ */
+async function autoDownloadRestoredSongs(songs: Record<string, any>) {
+    for (const [id, song] of Object.entries(songs)) {
+        if (!song.originalUrl) continue;
+        const isYT = song.originalUrl.includes('youtube.com') || song.originalUrl.includes('youtu.be');
+        if (!isYT) continue;
+
+        // Skip if audio already exists in IndexedDB
+        const existing = await getAudioBlob(id);
+        if (existing) continue;
+
+        try {
+            console.log(`[Backup] Downloading: ${song.title}`);
+            await importFromYouTube(song.originalUrl, () => { }, {
+                thumbnail: song.thumbnail,
+                artist: song.artist,
+            });
+        } catch (err) {
+            console.warn(`[Backup] Failed to download ${song.title}:`, err);
+        }
+    }
+}
 
 const BACKUP_VERSION = '1.0';
 const APP_VERSION = '2.1.0';
@@ -41,7 +68,6 @@ export async function exportLibraryBackup(): Promise<void> {
 
 /**
  * Import library backup from a JSON file.
- * Validates entries — songs with missing audio are marked as unavailable.
  */
 export async function importLibraryBackup(file: File): Promise<{
     success: boolean;
@@ -53,7 +79,6 @@ export async function importLibraryBackup(file: File): Promise<{
         const text = await file.text();
         const data: BackupData = JSON.parse(text);
 
-        // Validate backup format
         if (!data.backupVersion || !data.songs) {
             return { success: false, imported: 0, skipped: 0, error: 'Invalid backup file format.' };
         }
@@ -62,33 +87,30 @@ export async function importLibraryBackup(file: File): Promise<{
         let imported = 0;
         let skipped = 0;
 
-        // Import songs (merge, no duplicates)
         for (const [id, song] of Object.entries(data.songs)) {
             if (store.songs[id]) {
                 skipped++;
                 continue;
             }
-            // Mark as potentially unavailable (audio blob may not exist)
-            store.addSong({
-                ...song,
-                id,
-                unavailable: true, // Will be resolved when user tries to play
-            });
+            store.addSong({ ...song, id });
             imported++;
         }
 
-        // Import playlists (merge)
         for (const [id, playlist] of Object.entries(data.playlists)) {
             if (!store.playlists[id]) {
                 store.createPlaylist((playlist as any).name || id);
             }
-            // Add songs that exist
             const pl = playlist as any;
             if (pl.songIds) {
                 for (const songId of pl.songIds) {
                     store.addSongToPlaylist(id, songId);
                 }
             }
+        }
+
+        // Auto-download audio for restored songs (background, sequential)
+        if (imported > 0) {
+            autoDownloadRestoredSongs(data.songs);
         }
 
         return { success: true, imported, skipped };

@@ -246,6 +246,9 @@ const AudioController: React.FC = () => {
         // If source is being loaded, don't race it — the source loader will call play()
         if (sourceLoadingRef.current) return;
 
+        // Don't try to play on empty source — source loader will handle it
+        if (isPlaying && !globalAudio.src) return;
+
         if (isPlaying) {
             if (audioContextRef.current?.state === 'suspended') {
                 audioContextRef.current.resume().then(() => {
