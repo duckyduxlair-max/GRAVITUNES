@@ -38,6 +38,9 @@ function getVideoInfo(url) {
             '--no-warnings',
             '--no-playlist',
         ];
+        if (existsSync(COOKIES_PATH)) {
+            args.push('--cookies', COOKIES_PATH);
+        }
         if (ffmpegDir) {
             args.push('--ffmpeg-location', ffmpegDir);
         }
@@ -87,6 +90,9 @@ function downloadAudio(url, outputPath) {
             '--no-warnings',
             '-o', outputPath,
         ];
+        if (existsSync(COOKIES_PATH)) {
+            args.push('--cookies', COOKIES_PATH);
+        }
         if (ffmpegDir) {
             args.push('--ffmpeg-location', ffmpegDir);
         }
