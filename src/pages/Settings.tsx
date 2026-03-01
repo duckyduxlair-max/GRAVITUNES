@@ -517,7 +517,7 @@ const Settings: React.FC = () => {
                         <h3 className="text-xs font-bold tracking-[0.2em] text-zinc-500 uppercase">About</h3>
                         <div className="flex items-center justify-between py-1">
                             <span className="text-zinc-400 text-sm">Version</span>
-                            <span className="text-zinc-600 text-sm font-mono">2.0.0</span>
+                            <span className="text-zinc-600 text-sm font-mono">2.5.0</span>
                         </div>
                         <div className="h-px bg-white/5" />
                         <div className="flex items-center justify-between py-1">

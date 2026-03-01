@@ -221,7 +221,55 @@ const AudioController: React.FC = () => {
             state.playNext();
         };
 
+        // ── Network error handler — fallback to downloaded songs ──
+        let retryCount = 0;
+        const onError = () => {
+            const state = usePlayerStore.getState();
+            console.warn('[AudioController] Playback error detected');
+
+            // If streaming and error occurs, it's likely a network issue
+            if (state.currentStreamUrl) {
+                // Retry once after 3 seconds
+                if (retryCount < 1) {
+                    retryCount++;
+                    console.log('[AudioController] Retrying stream in 3s...');
+                    setTimeout(() => {
+                        if (globalAudio.src) {
+                            globalAudio.load();
+                            globalAudio.play().catch(() => {
+                                // Retry failed — fallback to library
+                                console.log('[AudioController] Retry failed, falling back to downloads');
+                                fallbackToLibrary();
+                            });
+                        }
+                    }, 3000);
+                    return;
+                }
+
+                // Retry exhausted — fallback to downloaded songs
+                console.log('[AudioController] Network error — falling back to downloaded songs');
+                fallbackToLibrary();
+            }
+        };
+
+        const fallbackToLibrary = () => {
+            const { songs } = useLibraryStore.getState();
+            const allIds = Object.keys(songs);
+            if (allIds.length > 0) {
+                retryCount = 0;
+                const randomId = allIds[Math.floor(Math.random() * allIds.length)];
+                usePlayerStore.getState().playSong(randomId, allIds);
+            } else {
+                usePlayerStore.getState().setIsPlaying(false);
+            }
+        };
+
+        // Reset retry count on successful playback
+        const onPlaying2 = () => { retryCount = 0; };
+
         globalAudio.addEventListener('ended', onEnded);
+        globalAudio.addEventListener('error', onError);
+        globalAudio.addEventListener('playing', onPlaying2);
 
         return () => {
             globalAudio.removeEventListener('play', handlePlay);
@@ -229,6 +277,8 @@ const AudioController: React.FC = () => {
             globalAudio.removeEventListener('canplay', handleCanPlay);
             globalAudio.removeEventListener('playing', handlePlaying);
             globalAudio.removeEventListener('ended', onEnded);
+            globalAudio.removeEventListener('error', onError);
+            globalAudio.removeEventListener('playing', onPlaying2);
             if (bufferingTimerRef.current) clearTimeout(bufferingTimerRef.current);
         };
     }, []);

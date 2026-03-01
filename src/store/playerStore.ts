@@ -173,14 +173,14 @@ export const usePlayerStore = create<PlayerState>()(
                         };
                     }
 
-                    // Stream queue exhausted → FALLBACK to random library song
+                    // Stream queue exhausted → FALLBACK to library with FULL queue
                     if (allSongIds.length > 0) {
                         const randomId = allSongIds[Math.floor(Math.random() * allSongIds.length)];
                         return {
                             currentStreamUrl: null,
                             currentStreamMetadata: null,
                             currentSongId: randomId,
-                            queue: allSongIds,
+                            queue: allSongIds,  // Always full library queue
                             currentIndex: allSongIds.indexOf(randomId),
                             isPlaying: true,
                             playbackSource: 'LIBRARY' as PlaybackSource,
@@ -192,22 +192,37 @@ export const usePlayerStore = create<PlayerState>()(
                 }
 
                 // ── LIBRARY QUEUE ──
-                if (state.queue.length === 0) return state;
+                if (state.queue.length === 0) {
+                    // Queue empty but library has songs — build queue from all songs
+                    if (allSongIds.length > 0) {
+                        const randomId = allSongIds[Math.floor(Math.random() * allSongIds.length)];
+                        return {
+                            queue: allSongIds,
+                            currentIndex: allSongIds.indexOf(randomId),
+                            currentSongId: randomId,
+                            isPlaying: true,
+                        };
+                    }
+                    return state;
+                }
 
                 let nextIndex = state.currentIndex + 1;
 
                 if (state.isShuffle) {
-                    nextIndex = Math.floor(Math.random() * state.queue.length);
+                    // Pick random but avoid same song
+                    do {
+                        nextIndex = Math.floor(Math.random() * state.queue.length);
+                    } while (nextIndex === state.currentIndex && state.queue.length > 1);
                 } else if (nextIndex >= state.queue.length) {
                     if (state.repeatMode === 'ALL') {
                         nextIndex = 0;
                     } else {
-                        // Endless play: pick random from library
+                        // Endless play: wrap around with full library queue
                         if (allSongIds.length > 0) {
                             const randomId = allSongIds[Math.floor(Math.random() * allSongIds.length)];
                             return {
-                                queue: [...state.queue, randomId],
-                                currentIndex: state.queue.length,
+                                queue: allSongIds,  // Reset to full library queue
+                                currentIndex: allSongIds.indexOf(randomId),
                                 currentSongId: randomId,
                                 isPlaying: true,
                             };
